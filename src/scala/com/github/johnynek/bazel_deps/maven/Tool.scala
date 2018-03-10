@@ -184,6 +184,7 @@ object Tool {
     def contents: String =
       Model(allDependencies(proj),
         None,
+        None,
         opt
       ).toDoc.render(80)
 

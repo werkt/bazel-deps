@@ -32,6 +32,7 @@ class ParseTest extends FunSuite {
                 None,
                 None))),
           None,
+          None,
           None)))
   }
   test("parse a file with options, yaml") {
@@ -62,6 +63,7 @@ class ParseTest extends FunSuite {
                 None,
                 None,
                 None))),
+          None,
           None,
           Some(
             Options(
@@ -102,6 +104,7 @@ class ParseTest extends FunSuite {
                 None,
                 None))),
           None,
+          None,
           Some(
             Options(
               None,
@@ -141,6 +144,7 @@ class ParseTest extends FunSuite {
                 None,
                 None,
                 Some(Set(ProcessorClass("com.google.auto.value.processor.AutoValueProcessor")))))),
+        None,
         None,
         None)))
   }

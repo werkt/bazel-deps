@@ -8,6 +8,7 @@ object ModelGenerators {
 
   val mavenPart: Gen[String] = Gen.identifier
 
+  val runtimeDependencyGen: Gen[RuntimeDependency] = mavenPart.map(RuntimeDependency(_))
   val subprojGen: Gen[Subproject] = mavenPart.map(Subproject(_))
   val classifierGen: Gen[Classifier] = mavenPart.map(Classifier(_))
   val langGen: Gen[Language] = Gen.oneOf(Language.Java, Language.Scala(Version("2.11.8"), true))
@@ -36,6 +37,15 @@ object ModelGenerators {
     }
     def artMap = Gen.mapOf(join(artifactOrProjGen, projectRecordGen(l1, ls))).map(_.take(30))
     Gen.mapOf(join(mavenGroupGen, artMap)).map { m => Dependencies(m.take(100)) }
+  }
+
+  def runtimeDepGen(o: Options): Gen[RuntimeDependencies] = {
+    val (l1, ls) = o.getLanguages match {
+      case Nil => (Language.Java, Nil)
+      case h :: tail => (h, tail)
+    }
+    def artMap = Gen.mapOf(join(artifactOrProjGen, Gen.listOfN(1, runtimeDependencyGen))).map(_.take(30))
+    Gen.mapOf(join(mavenGroupGen, artMap)).map { m => RuntimeDependencies(m.take(100)) }
   }
 
   val genBazelTarget: Gen[BazelTarget] =
@@ -76,8 +86,9 @@ object ModelGenerators {
     o <- Gen.option(optionGen)
     opts = o.getOrElse(Options.default)
     d <- depGen(opts)
+    rd <- Gen.option(runtimeDepGen(opts))
     r <- Gen.option(replacementGen(opts.getLanguages.toList))
-  } yield Model(d, r, o)
+  } yield Model(d, r, rd, o)
 
   val processorClassGen: Gen[ProcessorClass] =
     for {

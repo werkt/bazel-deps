@@ -58,12 +58,16 @@ import DocUtil._
 case class Model(
   dependencies: Dependencies,
   replacements: Option[Replacements],
+  runtimeDependencies: Option[RuntimeDependencies],
   options: Option[Options]) {
 
   def flatten: Model = copy(dependencies = dependencies.flatten)
 
   def getOptions: Options =
     options.getOrElse(Options.default)
+
+  def getRuntimeDependencies: RuntimeDependencies =
+    runtimeDependencies.getOrElse(RuntimeDependencies.empty)
 
   def getReplacements: Replacements =
     replacements.getOrElse(Replacements.empty)
@@ -117,9 +121,10 @@ object Model {
     type AE[T] = ValidatedNel[String, T]
     val validatedDeps = Dependencies.combine(vcp, a.dependencies, b.dependencies)
     val validatedOptR = combineO[AE, Replacements](a.replacements, b.replacements)(Replacements.combine)
+    val validatedOptRD = combineO[AE, RuntimeDependencies](a.runtimeDependencies, b.runtimeDependencies)(RuntimeDependencies.combine)
 
-    Applicative[AE].map2(validatedDeps, validatedOptR) { (deps, reps) =>
-      Model(deps, reps, oo)
+    Applicative[AE].map3(validatedDeps, validatedOptR, validatedOptRD) { (deps, reps, runtimeDeps) =>
+      Model(deps, reps, runtimeDeps, oo)
     }
   }
 
@@ -175,6 +180,7 @@ object ArtifactOrProject {
   implicit val ordering: Ordering[ArtifactOrProject] = Ordering.by(_.asString)
 }
 
+case class RuntimeDependency(asString: String)
 case class Subproject(asString: String)
 case class Classifier(asString: String)
 case class Packaging(asString: String)
@@ -942,6 +948,52 @@ object Replacements {
     val outerFn = onBoth[AE, Map[ArtifactOrProject, ReplacementRecord]](joinWith(_, _)(innerFn))
     joinWith(a.toMap, b.toMap)(outerFn)
       .map(Replacements(_))
+  }
+}
+
+case class RuntimeDependencies(toMap: Map[MavenGroup, Map[ArtifactOrProject, List[RuntimeDependency]]]) {
+  def getUnversionedCoordinates(): Map[UnversionedCoordinate, List[UnversionedCoordinate]] = {
+    def isEmpty(x: String) = x.isEmpty
+    def unversioned(g: MavenGroup, ap: ArtifactOrProject, classifier: Option[Classifier]): UnversionedCoordinate = {
+      val artifactId = classifier match {
+        case None => MavenArtifactId(ap)
+        case Some(c) => MavenArtifactId(ap, c)
+      }
+      UnversionedCoordinate(g, artifactId)
+    }
+
+    def substitute(g: MavenGroup, ap: ArtifactOrProject, dep: RuntimeDependency): UnversionedCoordinate = dep.asString.split(':') match {
+      case Array(group, artifact, classifier) => unversioned(
+        if (group.isEmpty) g else MavenGroup(group),
+        if (artifact.isEmpty) ap else ArtifactOrProject(artifact),
+        if (classifier.isEmpty) None else Some(Classifier(classifier)))
+      case _ => sys.error(s"unsupported runtime dep: ${dep}")
+    }
+
+    var coords = List[(UnversionedCoordinate, List[UnversionedCoordinate])]()
+    for ((g, map) <- toMap)
+      coords = coords ::: map.toList.flatMap { case (ap, list) =>
+        List((UnversionedCoordinate(g, MavenArtifactId(ap)), for (dep <- list) yield substitute(g, ap, dep)))
+      }
+    coords.toMap
+  }
+}
+
+object RuntimeDependencies {
+  def empty: RuntimeDependencies = RuntimeDependencies(Map.empty)
+
+  def combine(a: RuntimeDependencies, b: RuntimeDependencies): ValidatedNel[String, RuntimeDependencies] = {
+    import Dependencies.{ joinWith, onBoth }
+
+    def bothMatch[A](a: A, b: A): ValidatedNel[String, A] =
+      if (a == b) Validated.valid(a)
+      else Validated.invalidNel(s"in runtime_deps combine: $a != $b")
+
+    type AE[T] = ValidatedNel[String, T]
+    val innerFn = onBoth[AE, List[RuntimeDependency]](bothMatch(_, _))
+    val outerFn = onBoth[AE, Map[ArtifactOrProject, List[RuntimeDependency]]](joinWith(_, _)(innerFn))
+    joinWith(a.toMap, b.toMap)(outerFn)
+      .map(RuntimeDependencies(_))
   }
 }
 

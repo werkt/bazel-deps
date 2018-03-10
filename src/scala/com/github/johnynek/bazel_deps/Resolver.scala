@@ -154,8 +154,11 @@ class Resolver(servers: List[MavenServer], resolverCachePath: Path) {
 
   type Node = MavenCoordinate
 
-  def addAll(deps: Graph[Node, Unit], coords: TraversableOnce[MavenCoordinate], m: Model): Graph[Node, Unit] =
+  def addAll(deps: Graph[Node, Unit], coords: TraversableOnce[MavenCoordinate], m: Model): Graph[Node, Unit] = {
     coords.foldLeft(deps)(addToGraph(_, _, m))
+    // this needs to be transformed to addToGraph properly...
+    // m.getRuntimeDependencies.getUnversionedCoordinates.foldLeft(deps)(addToGraph(_, _, m))
+  }
 
   def addToGraph(deps: Graph[Node, Unit], dep: MavenCoordinate, m: Model): Graph[Node, Unit] = {
     val visitor = new Visitor(deps, m)

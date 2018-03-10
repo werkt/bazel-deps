@@ -85,6 +85,7 @@ object Decoders {
 
   private case class OptionsFirst(
     dependencies: Json,
+    runtime_deps: Option[Json],
     replacements: Option[Json],
     options: Option[Options])
 
@@ -119,6 +120,11 @@ object Decoders {
       implicit val deps = Decoder
         .decodeMapLike[Map, MavenGroup, Map[ArtifactOrProject , ProjectRecord]]
         .map(Dependencies(_))
+
+      implicit val rdD = auto.exportDecoder[RuntimeDependency].instance
+      implicit val rdepsD = Decoder
+        .decodeMapLike[Map, MavenGroup, Map[ArtifactOrProject , List[RuntimeDependency]]]
+        .map(RuntimeDependencies(_))
 
       (opts, auto.exportDecoder[Model].instance)
     }
